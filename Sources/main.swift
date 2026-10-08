@@ -437,7 +437,7 @@ final class StatusController: NSObject, NSMenuDelegate {
     let codeDip: CGFloat = 0.14 // glyph shrinks to this at each swap
     let codeSub = 18            // sub-frames per glyph (tween smoothness)
     let codeCycle: Double = 3.8 // seconds for the full loop (lower = faster)
-    lazy var codeGlyphMasks: [NSImage] = codeGlyphs.map { StatusController.glyphMask($0) }
+    lazy var codeGlyphMasks: [NSImage] = codeGlyphs.map { _ in StatusController.terminalMark() }
     let crabFPS: Double = 12.5 // matches the source GIF's 0.08s frame delay
     lazy var crabFrames: [NSImage] = StatusController.decodePNGs(clawdCrabFramePNGs)
     // Template frames: bright pixels (white eyes) become transparent holes so they're
@@ -1467,43 +1467,47 @@ final class StatusController: NSObject, NSMenuDelegate {
         return img
     }
 
-    // Rasterize a single glyph into a centered 60x60 alpha mask filling ~92%.
-    static func glyphMask(_ g: String) -> NSImage {
-        let attrs: [NSAttributedString.Key: Any] = [
-            .font: NSFont.systemFont(ofSize: 180), .foregroundColor: NSColor.black,
-        ]
-        let str = NSAttributedString(string: g, attributes: attrs)
-        let sz = str.size()
-        let big = NSImage(size: sz, flipped: false) { _ in str.draw(at: .zero); return true }
-        guard let rep = big.tiffRepresentation.flatMap(NSBitmapImageRep.init(data:)) else {
-            return NSImage(size: NSSize(width: 60, height: 60))
-        }
-        let w = rep.pixelsWide, h = rep.pixelsHigh, data = rep.bitmapData!
-        var minx = w, miny = h, maxx = -1, maxy = -1
-        for y in 0..<h { for x in 0..<w where data[(y*w+x)*4+3] > 20 {
-            minx = min(minx, x); maxx = max(maxx, x); miny = min(miny, y); maxy = max(maxy, y)
-        }}
-        guard maxx >= 0 else { return NSImage(size: NSSize(width: 60, height: 60)) }
-        let bw = CGFloat(maxx - minx + 1), bh = CGFloat(maxy - miny + 1)
-        let out: CGFloat = 60, fill = out * 0.92
-        let scale = fill / max(bw, bh)
-        let dw = bw * scale, dh = bh * scale
-        // NSBitmapImageRep origin is top-left; convert the bbox to bottom-left for drawing.
-        let srcRect = NSRect(x: CGFloat(minx), y: CGFloat(h - maxy - 1), width: bw, height: bh)
-        return NSImage(size: NSSize(width: out, height: out), flipped: false) { _ in
-            big.draw(in: NSRect(x: (out - dw)/2, y: (out - dh)/2, width: dw, height: dh),
-                     from: srcRect, operation: .sourceOver, fraction: 1.0)
+    // Keep each animation recognisable at rest, too. A shared Codex logo here made
+    // selecting Terminal or Orbit appear to do nothing until a task started.
+    static func terminalMark() -> NSImage {
+        let img = NSImage(size: NSSize(width: 18, height: 18), flipped: false) { _ in
+            NSColor.black.setStroke()
+            let prompt = NSBezierPath()
+            prompt.move(to: NSPoint(x: 3, y: 5))
+            prompt.line(to: NSPoint(x: 7, y: 9))
+            prompt.line(to: NSPoint(x: 3, y: 13))
+            prompt.lineWidth = 1.75; prompt.lineCapStyle = .round; prompt.lineJoinStyle = .round
+            prompt.stroke()
+            let cursor = NSBezierPath()
+            cursor.move(to: NSPoint(x: 10, y: 5)); cursor.line(to: NSPoint(x: 15, y: 5))
+            cursor.lineWidth = 1.75; cursor.lineCapStyle = .round; cursor.stroke()
             return true
         }
+        img.isTemplate = true
+        return img
+    }
+
+    static func orbitRestMark() -> NSImage {
+        let img = NSImage(size: NSSize(width: 18, height: 18), flipped: false) { _ in
+            NSColor.black.setFill()
+            for x: CGFloat in [2, 7.5, 13] {
+                NSBezierPath(ovalIn: NSRect(x: x, y: 7.5, width: 3, height: 3)).fill()
+            }
+            return true
+        }
+        img.isTemplate = true
+        return img
     }
 
     let logoSet: [NSImage] = [StatusController.codexMark()]
+    let orbitRestSet: [NSImage] = [StatusController.orbitRestMark()]
     func restingIcon(color: NSColor?) -> NSImage {
-        if animStyle == .crab { return crabIcon(color: color, frame: 0) }
-        if animStyle == .mark, let logo = logoSet.first {
-            return markLayer(logo, color: color, scale: markSparkScale)
+        switch animStyle {
+        case .web: return tint(logoSet, color: color, frame: 0)
+        case .code: return codeIcon(color: color, glyph: 0, scale: 1)
+        case .crab: return crabIcon(color: color, frame: 0)
+        case .mark: return tint(orbitRestSet, color: color, frame: 0)
         }
-        return tint(logoSet.isEmpty ? frames : logoSet, color: color, frame: 0)
     }
 
     func markLayer(_ mask: NSImage, color: NSColor?, scale: CGFloat) -> NSImage {
@@ -1541,8 +1545,8 @@ final class StatusController: NSObject, NSMenuDelegate {
             if tail < markFadeFrames { sparkAlpha = 1 - CGFloat(tail) / CGFloat(markFadeFrames) }
         }
         let dots = markLayer(strip[step.frame], color: color, scale: markDotScale)
-        guard sparkAlpha > 0, let logo = logoSet.first else { return dots }
-        let spark = markLayer(logo, color: color, scale: markSparkScale)
+        guard sparkAlpha > 0 else { return dots }
+        let spark = restingIcon(color: color)
         let img = NSImage(size: NSSize(width: 18, height: 18), flipped: false) { _ in
             dots.draw(at: .zero, from: .zero, operation: .sourceOver, fraction: 1 - sparkAlpha)
             spark.draw(at: .zero, from: .zero, operation: .sourceOver, fraction: sparkAlpha)

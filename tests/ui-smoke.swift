@@ -28,32 +28,67 @@ controller.showLabel = false
 precondition(controller.statusText(task, eff: "thinking").isEmpty)
 controller.showLabel = true
 
-let canvas = NSView(frame: NSRect(x: 0, y: 0, width: 520, height: 310))
+// Idle icons must differ at identical dimensions; selecting each menu item must update
+// the actual status button immediately, including after a working animation stops.
+let styles: [StatusController.AnimStyle] = [.web, .code, .crab, .mark]
+func pixels(_ image: NSImage) -> Data {
+    controller.flattened(image).tiffRepresentation!
+}
+for system in [false, true] {
+    controller.iconSystem = system
+    controller.iconCache.removeAll()
+    let color: NSColor? = system ? nil : controller.brand
+    var idleImages: [Data] = []
+    for style in styles {
+        let item = NSMenuItem(); item.representedObject = style.rawValue
+        controller.chooseStyle(item)
+        let expected = pixels(controller.restingIcon(color: color))
+        precondition(pixels(controller.statusItem.button!.image!) == expected, "Style selection did not update idle icon")
+        precondition(!idleImages.contains(expected), "Two animation styles share an idle icon")
+        idleImages.append(expected)
+        controller.render(label: "Working", color: color, animate: true, startedAt: now)
+        var moved = false
+        for _ in 0..<12 {
+            controller.animStep()
+            moved = moved || pixels(controller.statusItem.button!.image!) != expected
+        }
+        precondition(moved, "Working animation is frozen on its resting image")
+        controller.render(label: "", color: color, animate: false, startedAt: 0)
+        while controller.markOutro { controller.animStep() }
+        precondition(pixels(controller.statusItem.button!.image!) == expected, "Task completion lost selected style")
+    }
+}
+
+let canvas = NSView(frame: NSRect(x: 0, y: 0, width: 520, height: 330))
 canvas.wantsLayer = true; canvas.layer?.backgroundColor = NSColor.windowBackgroundColor.cgColor
 func label(_ text: String, x: CGFloat, y: CGFloat, size: CGFloat = 13) {
     let v = NSTextField(labelWithString: text); v.font = .systemFont(ofSize: size, weight: .medium)
     v.frame = NSRect(x: x, y: y, width: 475, height: 25); canvas.addSubview(v)
 }
-label("Codex Status Bar · 0.5.0", x: 22, y: 268, size: 20)
-label("Native component preview — synthetic task data", x: 22, y: 240, size: 11)
-for (i, style) in [StatusController.AnimStyle.web, .code, .crab, .mark].enumerated() {
-    controller.animStyle = style
-    for frame in [0, 4, 12] { precondition(controller.iconImage(color: controller.brand, frame: frame).size.width > 0) }
-    let image = NSImageView(frame: NSRect(x: 28 + i * 125, y: 202, width: 24, height: 24))
-    image.image = controller.iconImage(color: controller.brand, frame: style == .mark ? 20 : 4)
-    image.imageScaling = .scaleProportionallyUpOrDown; canvas.addSubview(image)
-    label(["Codex", "Terminal", "Crab", "Orbit"][i], x: CGFloat(58 + i * 125), y: 200, size: 11)
+label("Codex Status Bar · 0.5.1", x: 22, y: 285, size: 20)
+label("Actual native icons: each style stays distinct at rest", x: 22, y: 258, size: 11)
+for (i, name) in ["Codex", "Terminal", "Crab", "Orbit"].enumerated() {
+    label(name, x: CGFloat(143 + i * 94), y: 210, size: 12)
 }
-for (i, tuple) in [("Coding task", "tool", "Running command"), ("Figure export", "permission", "Awaiting permission"), ("Literature review", "done", "Done")].enumerated() {
-    let session = StatusController.Session(json: ["state": tuple.1, "label": tuple.2, "chatTitle": tuple.0, "entrypoint": "codex-app", "startedAt": now - 75, "ts": now], id: "preview-\(i)")
-    let row = SessionRowView(id: session.id, width: 475)
-    row.frame.origin = NSPoint(x: 18, y: 155 - i * 36)
-    controller.configureSessionRow(row, session, eff: controller.effectiveState(session, now: now)); canvas.addSubview(row)
+for (row, tuple) in [("Idle · Blue", false, false), ("Working · Blue", false, true),
+                     ("Idle · System", true, false), ("Working · System", true, true)].enumerated() {
+    let y = 166 - row * 42
+    label(tuple.0, x: 22, y: CGFloat(y), size: 12)
+    for (i, style) in styles.enumerated() {
+        controller.animStyle = style
+        let color: NSColor? = tuple.1 ? nil : controller.brand
+        let icon = tuple.2 ? controller.iconImage(color: color, frame: style == .mark ? 50 : 8)
+                          : controller.restingIcon(color: color)
+        let view = NSImageView(frame: NSRect(x: 152 + i * 94, y: y, width: 24, height: 24))
+        view.image = icon; view.imageScaling = .scaleProportionallyUpOrDown
+        if tuple.1 { view.contentTintColor = .labelColor }
+        canvas.addSubview(view)
+    }
 }
-label("Text and timer toggles · Completion sound thresholds", x: 22, y: 20, size: 12)
+label("Synthetic idle and working states · No hooks installed", x: 22, y: 10, size: 11)
 canvas.layoutSubtreeIfNeeded()
 let rep = canvas.bitmapImageRepForCachingDisplay(in: canvas.bounds)!
 canvas.cacheDisplay(in: canvas.bounds, to: rep)
 let output = ProcessInfo.processInfo.environment["CODEX_STATUSBAR_UI_IMAGE"]!
 try rep.representation(using: .png, properties: [:])!.write(to: URL(fileURLWithPath: output))
-print("AppKit checks passed: menu options, animation rendering, completion sound gating, duplicate/interrupt suppression, long-running state, text toggle.")
+print("AppKit checks passed: distinct idle styles, immediate menu selection, working/idle transitions in both colors, menu options and completion sound gating.")

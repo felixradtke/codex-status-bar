@@ -1,5 +1,12 @@
 # Validation — 8 October 2026
 
+## 0.5.1 icon regression checks
+
+- In both Blue and System modes, all four resting icons have distinct rendered pixels.
+- Selecting each style updates the actual status button immediately while idle.
+- Each style animates while working and returns to its own resting image on completion.
+- Native icon grid rendered and visually inspected; 18 Node tests still pass.
+
 ## Passed locally
 
 - 18 Node tests: configuration preservation and one-time backups, idempotent installation, uninstall ownership, malformed config handling, shell quoting, empty PATH handling, parallel hook writers, per-tool approval priority, steering/timer preservation, duplicate/late completion, compaction, input requests, interruption, transcript partial writes and UTF-8 boundaries, and exclusion of CLI/subagent rollouts from the desktop fallback.

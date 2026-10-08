@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.5.1 — 2026-10-08
+
+- Give Codex, Terminal, Crab and Orbit distinct resting icons, so selecting a style is visible immediately.
+- Keep Orbit as dots when its animation settles; draw the Terminal prompt as crisp vector strokes.
+- Add native regression checks for distinct idle images, immediate style changes, and working/idle transitions in both color modes.
+
 ## 0.5.0 — 2026-10-08
 
 First Codex adaptation based directly on Claude Status Bar 0.4.5 (`dafb0c8`). Retains Orbit animation, text/timer toggles, completion-sound thresholds and rendering optimisations. Adds Codex hook handling, desktop event monitoring, interruption handling, per-tool concurrency, session links and distinct local storage.
