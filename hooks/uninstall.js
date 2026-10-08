@@ -1,34 +1,18 @@
 #!/usr/bin/env node
-
-const fs = require("fs");
-const os = require("os");
-const path = require("path");
-const cp = require("child_process");
-
-const home = os.homedir();
-// Match the dir, not "update.js": the narrower marker used to orphan the lifecycle hooks.
-const MARKER = path.join(home, ".claude", "statusbar");
-const shellQuote = (value) => `'${value.replace(/'/g, `'\\''`)}'`;
-const quotedMarkerPrefix = shellQuote(MARKER).slice(0, -1);
-const isOurs = (command) =>
-  command.includes(MARKER) || command.includes(quotedMarkerPrefix);
-const settingsPath = path.join(home, ".claude", "settings.json");
-
-// Tear down the desktop watcher LaunchAgent (best-effort; safe if absent).
-const AGENT_LABEL = "com.local.claudestatusbar.watcher";
-const agentPlist = path.join(home, "Library", "LaunchAgents", AGENT_LABEL + ".plist");
-try { cp.execSync(`launchctl bootout gui/${process.getuid()}/${AGENT_LABEL}`, { stdio: "ignore" }); } catch {}
-if (fs.existsSync(agentPlist)) { fs.rmSync(agentPlist); console.log("Removed desktop watcher LaunchAgent."); }
-try { cp.execSync("pkill -x ClaudeStatusBar", { stdio: "ignore" }); } catch {}
-
-if (!fs.existsSync(settingsPath)) { console.log("No settings.json; nothing to do."); process.exit(0); }
-
-const settings = JSON.parse(fs.readFileSync(settingsPath, "utf8"));
-for (const evt of Object.keys(settings.hooks || {})) {
-  settings.hooks[evt] = (settings.hooks[evt] || [])
-    .map((e) => ({ ...e, hooks: (e.hooks || []).filter((h) => !isOurs(h.command || "")) }))
-    .filter((e) => (e.hooks || []).length > 0);
-  if (settings.hooks[evt].length === 0) delete settings.hooks[evt];
+const fs = require('node:fs');
+const path = require('node:path');
+const { root, codexHome, writeAtomic } = require('./core');
+const quote = value => "'" + value.replace(/'/g, "'\\''") + "'";
+const file = path.join(codexHome, 'hooks.json');
+if (fs.existsSync(file)) {
+  const config = JSON.parse(fs.readFileSync(file, 'utf8'));
+  const prefix = quote(path.join(root, 'node.sh')) + ' ' + quote(path.join(root, 'update.js')) + ' ';
+  for (const [event, entries] of Object.entries(config.hooks || {})) {
+    config.hooks[event] = entries.map(e => ({ ...e, hooks: (e.hooks || []).filter(h => !String(h.command || '').startsWith(prefix)) })).filter(e => e.hooks.length);
+    if (!config.hooks[event].length) delete config.hooks[event];
+  }
+  writeAtomic(file, config);
 }
-fs.writeFileSync(settingsPath, JSON.stringify(settings, null, 2) + "\n");
-console.log("Removed status-bar hooks from", settingsPath);
+fs.mkdirSync(root, { recursive: true, mode: 0o700 });
+fs.writeFileSync(path.join(root, 'quit-intent'), '');
+console.log('Removed only this app’s hooks. Quit Codex Status Bar and delete the app to finish uninstalling.');

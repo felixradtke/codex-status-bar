@@ -1,110 +1,65 @@
+# Codex Status Bar
 
+A small native macOS menu bar companion for **Codex Desktop and Codex CLI**. See which tasks are working, waiting for approval, asking for input, or finished, without switching windows.
 
-A tiny macOS menu bar app that shows **Claude Code's live status**: an animated Claude icon while it's thinking or running a tool, a yellow dot when it's awaiting your permission, and the elapsed time of the current turn. Lightweight, no window, no dock icon, no usage dashboards.
+Derived directly from **Claude Status Bar 0.4.5**, upstream commit [`dafb0c8`](https://github.com/m1ckc3s/claude-status-bar/commit/dafb0c8), with its current interface and rendering improvements. See [the comparison](docs/COMPARISON.md) for what changed from the earlier Codex fork.
 
-Built so you can tab away during a long "thinking" stretch and still see, at a glance, whether Claude is working, waiting on you, or done.
+## Features
 
-<img width="480" height="383" alt="Screen Recording 2026-07-10 at 12 32 23 AM" src="https://github.com/user-attachments/assets/f5d77b7c-f41d-4276-b28f-e1cf655fd323" />
+- Multiple sessions with project/branch, desktop chat titles when available, and APP/CLI badges.
+- Approval and input requests take precedence over working sessions.
+- Independent **Show text** and **Show timer** toggles.
+- **Codex**, **Terminal**, **Crab**, and **Orbit** animation choices; blue or adaptive System color.
+- **Completion Sound**: Off, Every turn, 1 min+, 5 min+, or 15 min+. Off by default.
+- Explicit completion, interruption and compaction handling. A task is never declared complete merely because it went quiet.
+- Cached animation frames, change-only text redraws, mtime-based state reads, and desktop lifecycle notifications retained from upstream.
+- Separate application identity and files: it can run beside Claude Status Bar.
 
 ## Install
 
-### Homebrew (recommended)
+Requires macOS 12 or later, Node.js 18+, and Codex Desktop or Codex CLI.
 
-```bash
-brew install --cask claude-status-bar && open -a "Claude Status Bar"
+1. Open the supplied `CodexStatusBar.dmg` and drag **Codex Status Bar** into Applications.
+2. Launch it once. It installs only its own entries in your Codex `hooks.json`, backing up that file first.
+3. In Codex, review and trust the new definitions through `/hooks`, then start a new task. Installing a hook does not grant it trust.
+4. Select **Completion Sound → Every turn** if you want a chime whenever a task finishes.
+
+The supplied development build is ad-hoc signed, **not Apple-notarized**. The repository does not currently have a Homebrew cask. Download builds only from this repository or build locally.
+
+On desktop, a read-only local monitor also follows Codex rollout lifecycle events when hooks are unavailable. Already-running tasks appear on their next observable activity. Hooks provide the most accurate approval/input indications. The monitor cannot infer an approval prompt that Codex does not record.
+
+## Build and test
+
+```sh
+node --test tests/*.test.js
+./build.sh             # build/Codex Status Bar.app, native architecture
+./build.sh --dmg       # build/CodexStatusBar.dmg
 ```
 
-The one launch at the end matters: it wires up the Claude Code hooks automatically. After that it starts itself whenever Claude Code runs.
+The default build targets this Mac's architecture and macOS 12. To build a universal binary, use `CODEX_STATUSBAR_ARCHS="arm64 x86_64" ./build.sh` with a toolchain containing both architectures' Swift compatibility libraries. The initial build was tested on Apple Silicon; Intel is not validated.
 
-**Already using the app from the DMG?** The same command switches you to Homebrew. Your settings and hooks carry over, and the old copy cleans itself up on first launch. Full details, edge cases, and the tested upgrade matrix: **[HOMEBREW.md](HOMEBREW.md)**.
+Set `SIGN_IDENTITY` to your own Developer ID certificate if signing for distribution. Notarization is a separate release step; an ad-hoc signature is not notarization.
 
-> [!IMPORTANT]
-> **Updated (or installed) mid-session?** Sessions already open appear the next time they do something (a prompt or a tool call). Starting a new `claude` session also works.
-
-### DMG
-
-*Signed and notarized by Apple*
-
-1. Download the latest `ClaudeStatusBar.dmg` from [Releases](../../releases).
-2. Open it and drag **Claude Status Bar** into Applications.
-3. Launch it once. On first launch it wires up the Claude Code hooks for you automatically.
-4. Start a new Claude Code session, the icon appears whenever Claude Code is running.
-
-## Updating
-
-The menu tells you when an update is ready. Installed via brew, it shows **Update via brew** with a copy button (paste the command in your terminal); it appears once Homebrew can actually deliver the new version, which can lag a release by up to a day. Installed via DMG, **Update available** opens the releases page, plus a one-click **Switch to Homebrew** option.
-
-Or just run `brew upgrade --cask claude-status-bar` (brew), or download the latest DMG and drag it into Applications (manual). Hooks refresh themselves on the next launch; nothing to run by hand. **Upgrading from 0.3.x via DMG? Launch the app once after dragging**, that's what retires the old-named copy ([details](HOMEBREW.md#faq--troubleshooting)).
-
-## What it shows
-
-- **Thinking / working** — the icon animates, with a live `1m 1s` timer.
-- **Running a tool** — a short label (`Editing`, `Reading`, `Running command`, `Using tool`, …).
-- **Awaiting permission** — a paused yellow dot, in both the CLI and the Desktop app.
-- **Idle / done** — rests on the Claude logo.
-
-Everything is controlled from the menu:
-
-- **Show timer:** toggle the elapsed `1m 1s` clock.
-- **Show text:** show the status label next to the icon (`Manifesting…`, `Percolating…`, `Editing`, `Running command`), or turn it off for an icon-only menu bar (on by default).
-- **Animation style:**
-  - **Spark**, the web/chat "morph" spark
-  - **Unicode**, the terminal glyph spinner
-  - **Clawd™**, a pixel-art Clawd crab that scuttles while Claude works
-  - **Orbit**, three dots that orbit, merge and breathe
-- **Icon color:** **Orange** or **System** (adaptive black/white). All four styles follow this setting: in System mode Clawd™ renders as a shaded monochrome silhouette that matches the menu bar.
-- **Version and update:** the menu shows your current version and tells you when an update is ready (see [Updating](#updating)).
-
-### Where it works
-
-| Surface | Tracked? |
-|---|---|
-| Claude Code CLI (terminal) | ✅ |
-| Claude Code Desktop — **Code** tab | ✅ |
-| Cursor (Claude Code extension) | ✅ |
-| Claude Desktop — **Chat/Cowork** tab | ❌ |
-
-**Multi-session support.** When several Claude Code sessions run at once (multiple terminals, or a terminal plus the desktop app), the menu bar surfaces the highest-priority one: a session awaiting your permission is never hidden behind one that's thinking. The dropdown lists every live session. Precise per-tab focus is in progress: **[issue #19 →](https://github.com/m1ckc3s/claude-status-bar/issues/19)**.
+For isolated UI testing, set `CODEX_STATUSBAR_PREVIEW=1` and `CODEX_STATUSBAR_ROOT=/absolute/path/to/fixture` when launching the executable. Preview mode skips hook installation, monitoring, update checks and automatic exit. Runtime files go only into the fixture.
 
 ## How it works
 
-> [!NOTE]
-> You don't open this app; it opens itself when a Claude Code session starts, and quits when none is running. The only manual launch is the very first one after install, to set up the hooks. Opened by hand with no session active, it quits again after a few seconds. That's normal.
+Codex hooks receive lifecycle events and atomically update one file per task under `${CODEX_HOME:-~/.codex}/codex-status-bar/state.d/`. Concurrent writers are serialized, and tool calls are tracked individually. Late results from a previous turn cannot complete a newer turn. The app polls the small state files, not the full transcripts.
 
-The app is stateless. Claude Code fires hooks as it works; the app polls those updates and aggregates them across every live session into a single icon, a permission dot if one needs you, animating if any session is working, resting when all are idle. It launches itself when Claude Code opens and quits when nothing's running, so there's nothing to manage.
+The desktop monitor reads local rollout records incrementally and preserves partially written lines. It uses the session index for chat titles, ignores child-agent rollouts as separate tasks, and gives hooks priority within a turn. It runs only while the app is alive. Codex's transcript format is not a stable public API, so fallback compatibility may need updating with future Codex versions.
 
-The installer merges its hooks into `~/.claude/settings.json` (backing it up first), and the app's only network activity is a once-a-day update check against GitHub's and Homebrew's public APIs ([details](PRIVACY.md)).
-
-## Requirements
-
-- macOS 12+, [Claude Code](https://claude.com/claude-code) (CLI or the Desktop app), Node.js
-
-## Troubleshooting
-
-See [Troubleshooting](TROUBLESHOOTING.md)
+Clicking a desktop row opens its `codex://threads/…` link. CLI rows raise the terminal application; selecting an exact terminal tab is not implemented. Cloud-only tasks without local rollouts/hooks are not tracked.
 
 ## Uninstall
 
-```bash
-node "/Applications/Claude Status Bar.app/Contents/Resources/uninstall.js"   # removes only our hooks
-brew uninstall --zap claude-status-bar                                       # removes the app + every file it created
+```sh
+node "/Applications/Codex Status Bar.app/Contents/Resources/uninstall.js"
 ```
 
-Installed manually instead of via brew? Skip the second line and drag the app to the Trash.
+Then quit Codex Status Bar and remove its app bundle. The uninstaller removes only commands owned by this app; it keeps unrelated hooks and the backup. You may delete its `codex-status-bar` runtime folder afterward.
 
-## Acknowledgements
+## Attribution
 
-I built this for myself, then open-sourced it because other people might find it handy too, and I'm genuinely thrilled that so many of you do. An extra thank-you to everyone who went the extra mile and contributed code, fixes, and ideas.
+Based on [m1ckc3s/claude-status-bar](https://github.com/m1ckc3s/claude-status-bar). Its Git history, MIT license, acknowledgements, Orbit/Crab animation assets, and completion sound are retained. The Codex lifecycle adapter, desktop monitor and terminal-mark icon are specific to this fork. [Jas952/codex-status-bar](https://github.com/Jas952/codex-status-bar) was inspected for comparison; this implementation starts from the current Claude upstream instead.
 
-**[See the contributors →](ACKNOWLEDGEMENTS.md)**
-
-## Trademark / Not Affiliated
-
-This is an unofficial, open-source side project. **It is not affiliated with, endorsed by, or sponsored by Anthropic.** "Claude" and the Claude spark logo are trademarks of Anthropic, used here nominatively. This project is MIT licensed, but that covers the source code only and conveys no rights to Anthropic's trademarks or brand.
-
-If I'm violating or impeding your trademark, Contact me on X ([@mickces](https://x.com/mickces))
-This is a free side project; I'm not monetizing it.
-
-## License
-
-MIT 
+This is an unofficial community project, not affiliated with or endorsed by OpenAI or Anthropic. The MIT license applies to source code and does not grant rights to their trademarks.
